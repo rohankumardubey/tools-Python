@@ -447,14 +447,16 @@ class SeEpub:
 
 		# Quick sanity check before we begin
 		if not section.get_attr("id") or (section.parent.tag.lower() != "body" and not section.parent.get_attr("id")):
-			raise se.InvalidXhtmlException("Section without [attr]id[/] attribute.")
+			raise se.InvalidXhtmlException(f"Section without [attr]id[/] attribute: [html]{section.to_tag_string()}[/]")
 
 		if section.parent.tag.lower() == "body":
 			section.set_attr("epub:type", f"{section.get_attr('epub:type')} {section.parent.get_attr('epub:type')}".strip())
 
-		# Try to find our parent tag in the output, by ID.
-		# If it's not in the output, then append it to the tag's closest parent by ID (or <body>), then iterate over its children and do the same.
-		existing_section = output_dom.xpath(f"//*[@id='{section.get_attr('id')}']")
+		# Try to find our parent element in the current output, by ID.
+		# If it's not in the output, then append it to the elements's closest parent by ID (or <body>), then iterate over its children and do the same.
+		if section.get_attr("data-parent"):
+			existing_section = output_dom.xpath(f"//*[@id='{section.get_attr('data-parent')}']")
+
 		if not existing_section:
 			if section.parent.tag.lower() == "body":
 				output_dom.xpath("/html/body")[0].append(section)
