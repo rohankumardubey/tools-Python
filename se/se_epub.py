@@ -454,6 +454,7 @@ class SeEpub:
 
 		# Try to find our parent element in the current output, by ID.
 		# If it's not in the output, then append it to the elements's closest parent by ID (or <body>), then iterate over its children and do the same.
+		existing_section = None
 		if section.get_attr("data-parent"):
 			existing_section = output_dom.xpath(f"//*[@id='{section.get_attr('data-parent')}']")
 
