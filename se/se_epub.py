@@ -435,7 +435,6 @@ class SeEpub:
 	def _recompose_xhtml(self, section: se.easy_xml.EasyXmlElement, output_dom: se.easy_xml.EasyXmlTree) -> None:
 		"""
 		Helper function used in self.recompose()
-		Recursive function for recomposing a series of XHTML files into a single XHTML file.
 
 		INPUTS
 		section: An EasyXmlElement to inspect
