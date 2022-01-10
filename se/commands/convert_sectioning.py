@@ -23,6 +23,8 @@ def convert_sectioning(plain_output: bool) -> int:
 		try:
 			se_epub = SeEpub(directory)
 
+			print(directory)
+
 			for file in se_epub.spine_file_paths:
 				with open(file, "r+", encoding="utf-8") as file:
 					dom = se.easy_xml.EasyXmlTree(file.read())
