@@ -449,22 +449,18 @@ class SeEpub:
 		if not section.get_attr("id") or (section.parent.tag.lower() != "body" and not section.parent.get_attr("id")):
 			raise se.InvalidXhtmlException(f"Section without [attr]id[/] attribute: [html]{section.to_tag_string()}[/]")
 
-		if section.parent.tag.lower() == "body":
+		if section.parent.tag.lower() == "body" and not section.get_attr("data-parent"):
 			section.set_attr("epub:type", f"{section.get_attr('epub:type')} {section.parent.get_attr('epub:type')}".strip())
 
-		# Try to find our parent element in the current output, by ID.
-		# If it's not in the output, then append it to the elements's closest parent by ID (or <body>), then iterate over its children and do the same.
+		# Try to find our parent element in the current output dom, by ID.
+		# If it's not in the output, then append this element to the elements's closest parent by ID (or <body>), then iterate over its children and do the same.
 		existing_section = None
-		if section.get_attr("data-parent"):
-			existing_section = output_dom.xpath(f"//*[@id='{section.get_attr('data-parent')}']")
+		existing_section = output_dom.xpath(f"//*[@id='{section.get_attr('data-parent')}']")
 
-		if not existing_section:
-			if section.parent.tag.lower() == "body":
-				output_dom.xpath("/html/body")[0].append(section)
-			else:
-				output_dom.xpath(f"//*[@id='{section.parent.get_attr('id')}']")[0].append(section)
-
-			existing_section = output_dom.xpath(f"//*[@id='{section.get_attr('id')}']")
+		if existing_section:
+			existing_section[0].append(section)
+		else:
+			output_dom.xpath("/html/body")[0].append(section)
 
 		# Convert all <img> references to inline base64
 		# We even convert SVGs instead of inlining them, because CSS won't allow us to style inlined SVGs
@@ -482,12 +478,6 @@ class SeEpub:
 
 			if src.endswith(".png"):
 				img.set_attr("src", f"data:image/png;base64, {image_contents_base64}")
-
-		for child in section.xpath("./*"):
-			if child.tag in ("section", "article"):
-				self._recompose_xhtml(child, output_dom)
-			else:
-				existing_section.append(child)
 
 	def recompose(self, output_xhtml5: bool, extra_css_file: Path = None) -> str:
 		"""
@@ -569,6 +559,10 @@ class SeEpub:
 					self._recompose_xhtml(node, output_dom)
 				except se.SeException as ex:
 					raise se.SeException(f"[path][link=file://{file_path}]{file_path}[/][/]: {ex}") from ex
+
+		# Remove data-parent attributes
+		for node in output_dom.xpath("//*[@data-parent]"):
+			node.remove_attr("data-parent")
 
 		# Did we add wrappers? If so add the CSS
 		# We also have to give the wrapper a height, because it may have siblings that were recomposed in from other files
