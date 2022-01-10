@@ -38,7 +38,7 @@ def convert_sectioning(plain_output: bool) -> int:
 							node.unwrap()
 
 						file.seek(0)
-						file.write(dom.to_string())
+						file.write(se.formatting.format_xhtml(dom.to_string()))
 						file.truncate()
 
 		except se.SeException as ex:
