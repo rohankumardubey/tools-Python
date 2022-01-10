@@ -10,7 +10,7 @@ import se.formatting
 from se.se_epub import SeEpub
 
 
-def convert_sectioning(plain_output: bool) -> int:
+def convert_sectioning() -> int:
 	"""
 	Entry point for `se convert-sectioning`
 	"""
@@ -25,8 +25,8 @@ def convert_sectioning(plain_output: bool) -> int:
 
 			print(directory)
 
-			for file in se_epub.spine_file_paths:
-				with open(file, "r+", encoding="utf-8") as file:
+			for file_path in se_epub.spine_file_paths:
+				with open(file_path, "r+", encoding="utf-8") as file:
 					dom = se.easy_xml.EasyXmlTree(file.read())
 
 					nodes = dom.xpath("//*[ (name() = 'section' or name() = 'article') and parent::*[name() = 'section' or name() = 'article'] and count(preceding-sibling::*) = 0 and count(following-sibling::*) = 0]")
