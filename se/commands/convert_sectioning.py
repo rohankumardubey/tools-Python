@@ -10,7 +10,7 @@ import se.formatting
 from se.se_epub import SeEpub
 
 
-def convert_sectioning() -> int:
+def convert_sectioning(plain_output: bool) -> int: # pylint: disable=unused-argument
 	"""
 	Entry point for `se convert-sectioning`
 	"""
