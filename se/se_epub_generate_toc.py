@@ -406,11 +406,7 @@ def process_headings(dom: EasyXmlTree, textf: str, toc_list: list, nest_under_ha
 		# We don't have a heading, so get first content item
 		content_item = dom.xpath("//p | //header | //img")
 		if content_item is not None:
-			parents = content_item[0].xpath("./ancestor::*[name() = 'section' or name() = 'article']")
-			if parents:
-				special_item.level = len(parents)
-			else:  # couldn't find a suitable parent, so just put it at top level
-				special_item.level = 1
+			special_item.level = get_level(content_item[0], toc_list)
 		if nest_under_halftitle:
 			special_item.level += 1
 		special_item.title = dom.xpath("//head/title/text()", True)  # Use the page title as the ToC entry title.
@@ -431,6 +427,12 @@ def process_headings(dom: EasyXmlTree, textf: str, toc_list: list, nest_under_ha
 			# if it's not a bodymatter item we don't care about whether it's single_file
 			toc_item = process_a_heading(heading, textf, is_toplevel, False)
 
+		toc_item.level = get_level(heading, toc_list)	 # DEBUG
+		# BUT if it's a subchapter, we have to add how deep it is within the chapter
+		parent_sections = heading.xpath("./ancestor::*[name() = 'section' or name() = 'article']")
+		if parent_sections:
+			toc_item.level += len(parent_sections) - 1  # everything should have at least one parent section
+
 		# Tricky check to see if we want to include the item because there's a halftitle
 		# but only a single content file with no subsidiary sections.
 		if is_toplevel and single_file and nest_under_halftitle and len(heads) == 1:
@@ -439,6 +441,33 @@ def process_headings(dom: EasyXmlTree, textf: str, toc_list: list, nest_under_ha
 			toc_item.level += 1
 		is_toplevel = False
 		toc_list.append(toc_item)
+
+
+def get_level(node: EasyXmlElement, toc_list: list) -> int:
+	if not node.parent:
+		return 1  # must be at the top level
+	data_parents = node.xpath("//*[@data-parent]")
+	if not data_parents:
+		return 1
+	data_parent = data_parents[0].get_attr("data-parent")
+
+	# also need to check how deep this heading is within the current file
+	parent_sections = node.xpath("./ancestor::*[name() = 'section' or name() = 'article']")
+	if parent_sections:
+		depth = len(parent_sections)
+	else:
+		depth = 0
+
+	if data_parent:
+		# see if we can find it in already processed (as we should if spine is correctly ordered)
+		parent_file = [t for t in toc_list if t.id == data_parent]
+		if parent_file:
+			return parent_file[0].level + depth
+		else:
+			return 1
+	else:
+		return 1
+
 
 def process_a_heading(node: EasyXmlElement, textf: str, is_toplevel: bool, single_file: bool) -> TocItem:
 	"""
