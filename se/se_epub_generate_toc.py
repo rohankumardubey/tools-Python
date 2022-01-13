@@ -365,6 +365,7 @@ def extract_strings(node: EasyXmlElement) -> str:
 
 	out_string = node.inner_xml()
 	out_string = strip_notes(out_string)
+	out_string = out_string.replace("\n", "")
 	return regex.sub(r"[\n\t]", "", out_string)
 
 def process_headings(dom: EasyXmlTree, textf: str, toc_list: list, nest_under_halftitle: bool, single_file: bool) -> None:
@@ -407,12 +408,11 @@ def process_headings(dom: EasyXmlTree, textf: str, toc_list: list, nest_under_ha
 		content_item = dom.xpath("//p | //header | //img")
 		if content_item is not None:
 			special_item.level = get_level(content_item[0], toc_list)
-		if nest_under_halftitle:
-			special_item.level += 1
 		special_item.title = dom.xpath("//head/title/text()", True)  # Use the page title as the ToC entry title.
 		if special_item.title is None:
 			special_item.title = "NO TITLE"
 		special_item.file_link = textf
+		special_item.place = place
 		toc_list.append(special_item)
 		return
 
@@ -427,46 +427,40 @@ def process_headings(dom: EasyXmlTree, textf: str, toc_list: list, nest_under_ha
 			# if it's not a bodymatter item we don't care about whether it's single_file
 			toc_item = process_a_heading(heading, textf, is_toplevel, False)
 
-		toc_item.level = get_level(heading, toc_list)	 # DEBUG
-		# BUT if it's a subchapter, we have to add how deep it is within the chapter
-		parent_sections = heading.xpath("./ancestor::*[name() = 'section' or name() = 'article']")
-		if parent_sections:
-			toc_item.level += len(parent_sections) - 1  # everything should have at least one parent section
+		toc_item.level = get_level(heading, toc_list)
+		toc_item.place = place
 
-		# Tricky check to see if we want to include the item because there's a halftitle
-		# but only a single content file with no subsidiary sections.
-		if is_toplevel and single_file and nest_under_halftitle and len(heads) == 1:
-			continue
-		if nest_under_halftitle:
-			toc_item.level += 1
 		is_toplevel = False
 		toc_list.append(toc_item)
 
 
 def get_level(node: EasyXmlElement, toc_list: list) -> int:
-	if not node.parent:
-		return 1  # must be at the top level
-	data_parents = node.xpath("//*[@data-parent]")
-	if not data_parents:
-		return 1
-	data_parent = data_parents[0].get_attr("data-parent")
-
-	# also need to check how deep this heading is within the current file
+	# first need to check how deep this heading is within the current file
 	parent_sections = node.xpath("./ancestor::*[name() = 'section' or name() = 'article']")
 	if parent_sections:
 		depth = len(parent_sections)
 	else:
-		depth = 0
+		depth = 1
+
+	if not node.parent:
+		return depth  # must be at the top level
+
+	data_parents = node.xpath("//*[@data-parent]")
+	if not data_parents:
+		return depth
+
+	data_parent = data_parents[0].get_attr("data-parent")
 
 	if data_parent:
 		# see if we can find it in already processed (as we should if spine is correctly ordered)
 		parent_file = [t for t in toc_list if t.id == data_parent]
 		if parent_file:
-			return parent_file[0].level + depth
+			this_level = parent_file[0].level + 1
+			return this_level + depth - 1  # subtract from depth because all headings should have depth >= 1
 		else:
-			return 1
+			return depth
 	else:
-		return 1
+		return depth
 
 
 def process_a_heading(node: EasyXmlElement, textf: str, is_toplevel: bool, single_file: bool) -> TocItem:
@@ -484,11 +478,6 @@ def process_a_heading(node: EasyXmlElement, textf: str, is_toplevel: bool, singl
 	"""
 
 	toc_item = TocItem()
-	parent_sections = node.xpath("./ancestor::*[name() = 'section' or name() = 'article']")
-	if parent_sections:
-		toc_item.level = len(parent_sections)
-	else:
-		toc_item.level = 1
 
 	toc_item.division = get_book_division(node)
 
@@ -590,6 +579,8 @@ def evaluate_descendants(node: EasyXmlElement, toc_item: TocItem) -> TocItem:
 				child_strings = regex.sub(r"\bordinal\b", "", child_strings)
 				# remove extra spaces
 				child_strings = regex.sub(r"[ ]{2,}", " ", child_strings)
+				# remove any carriage returns
+				child_strings = regex.sub(r"\n", "", child_strings)
 				# get rid of any endnotes
 				child_strings = strip_notes(child_strings)
 				toc_item.title = child_strings.strip()
@@ -699,20 +690,26 @@ def process_all_content(file_list: list) -> Tuple[list, list]:
 	single_file = (len(body_items) == 1)
 
 	nest_under_halftitle = False
-	place = Position.NONE
+
 	for textf in file_list:
 		with open(textf, "r", encoding="utf-8") as file:
 			dom = se.easy_xml.EasyXmlTree(file.read())
-		body = dom.xpath("//body")
-		if body:
-			place = get_place(body[0])
-		else:
-			raise se.InvalidInputException("Couldn’t locate [xhtml]<body>[/].")
-		if place == Position.BACK:
-			nest_under_halftitle = False
 		process_headings(dom, textf.name, toc_list, nest_under_halftitle, single_file)
 		if dom.xpath("/html/body//*[contains(@epub:type, 'halftitlepage')]"):
 			nest_under_halftitle = True
+
+	# now go through adjusting for nesting under halftitle
+	if nest_under_halftitle:
+		# tricky because a few books have forewords, etc AFTER the halftitle, so have to know if we've passed it
+		passed_halftitle = False
+		for toc_item in toc_list:
+			if toc_item.place == Position.BODY:
+				toc_item.level += 1
+			if passed_halftitle and toc_item.place == Position.FRONT:
+				toc_item.level += 1
+			if "halftitle" in toc_item.file_link:
+				passed_halftitle = True
+
 
 	# We add this dummy item because outputtoc always needs to look ahead to the next item.
 	last_toc = TocItem()
